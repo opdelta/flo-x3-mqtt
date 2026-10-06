@@ -1,0 +1,17 @@
+services:
+  flo:
+    build: .
+    image: flo-x5-mqtt:local
+    restart: unless-stopped
+    init: true
+    network_mode: host
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    stop_grace_period: 120s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

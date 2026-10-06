@@ -1,0 +1,116 @@
+blueprint:
+  name: FLO weekly charging schedule
+  description: >-
+    Charge only while a Home Assistant Schedule helper is on. Keeps Restricted
+    Access enabled to prevent automatic charging outside the allowed windows.
+    Requires Home Assistant, MQTT, and the FLO cloud connection to remain online.
+    Disable this automation before using unrestricted/manual charging.
+  domain: automation
+  input:
+    schedule:
+      name: Allowed charging times
+      selector:
+        entity:
+          domain: schedule
+    station_online:
+      name: FLO Station Online sensor
+      selector:
+        entity:
+          domain: binary_sensor
+    vehicle_connected:
+      name: FLO Vehicle Connected sensor
+      selector:
+        entity:
+          domain: binary_sensor
+    vehicle_charging:
+      name: FLO Vehicle Charging sensor
+      selector:
+        entity:
+          domain: binary_sensor
+    restricted_access:
+      name: FLO Restricted Access switch
+      selector:
+        entity:
+          domain: switch
+    start_charging:
+      name: FLO Start Charging button
+      selector:
+        entity:
+          domain: button
+    stop_charging:
+      name: FLO Stop Charging button
+      selector:
+        entity:
+          domain: button
+
+mode: restart
+max_exceeded: silent
+
+variables:
+  schedule_entity: !input schedule
+  online_entity: !input station_online
+  connected_entity: !input vehicle_connected
+  charging_entity: !input vehicle_charging
+  restricted_entity: !input restricted_access
+
+trigger:
+  - platform: state
+    entity_id: !input schedule
+    to: "on"
+  - platform: state
+    entity_id: !input schedule
+    to: "off"
+  - platform: state
+    entity_id: !input station_online
+    to: "on"
+  - platform: state
+    entity_id: !input vehicle_connected
+    to: "on"
+  - platform: state
+    entity_id: !input vehicle_charging
+    to: "on"
+  - platform: state
+    entity_id: !input restricted_access
+    to: "off"
+  - platform: homeassistant
+    event: start
+
+condition:
+  - condition: template
+    value_template: >-
+      {{ is_state(online_entity, 'on')
+         and states(schedule_entity) in ['on', 'off'] }}
+
+action:
+  - if:
+      - condition: template
+        value_template: >-
+          {{ is_state(schedule_entity, 'off')
+             and is_state(connected_entity, 'on')
+             and is_state(charging_entity, 'on') }}
+    then:
+      - service: button.press
+        target:
+          entity_id: !input stop_charging
+  - if:
+      - condition: template
+        value_template: "{{ not is_state(restricted_entity, 'on') }}"
+    then:
+      - service: switch.turn_on
+        target:
+          entity_id: !input restricted_access
+      - wait_template: "{{ is_state(restricted_entity, 'on') }}"
+        timeout: "00:01:30"
+        continue_on_timeout: false
+  - if:
+      - condition: template
+        value_template: >-
+          {{ is_state(online_entity, 'on')
+             and is_state(schedule_entity, 'on')
+             and is_state(connected_entity, 'on')
+             and is_state(charging_entity, 'off')
+             and is_state(restricted_entity, 'on') }}
+    then:
+      - service: button.press
+        target:
+          entity_id: !input start_charging

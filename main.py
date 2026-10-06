@@ -1,11 +1,15 @@
-"""flo X5 sync daemon."""
+"""FLO charger MQTT bridge."""
 
 import os
-import time
 import logging
+import signal
+from pathlib import Path
+
+import requests
+from dotenv import load_dotenv
 
 from flo_client.device import FloX5Device
-from flo_client.consts import *
+from flo_client.consts import DATA_FOLDER
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +24,13 @@ def configure_logging(log_level: str | None) -> None:
     logging.basicConfig(level=level, format=format)
 
 
-if __name__ == "__main__":
-    # Get username and password from command line
+def main() -> int:
+    # Load environment variables from .env file if it exists
+    env_path = Path(".env")
+    if env_path.exists():
+        load_dotenv(env_path)
+
+    # Get settings from the environment.
     username = os.environ.get("FLO_USERNAME")
     password = os.environ.get("FLO_PASSWORD")
     station_name = os.environ.get("FLO_STATION_NAME")
@@ -33,29 +42,23 @@ if __name__ == "__main__":
 
     configure_logging(log_level)
 
-    # Check if data folder exists
-    if not os.path.exists("./" + DATA_FOLDER):
-        raise Exception(
-            "Data folder not found: '"
-            + DATA_FOLDER
-            + "'. Please create it and re-run the application."
-        )
+    Path(DATA_FOLDER).mkdir(mode=0o700, parents=True, exist_ok=True)
 
     # Validate the environment variables, the MQTT username and password are optional.
     if not username:
-        raise Exception("FLO_USERNAME environment variable not set.")
+        raise ValueError("FLO_USERNAME environment variable not set.")
     if not password:
-        raise Exception("FLO_PASSWORD environment variable not set.")
+        raise ValueError("FLO_PASSWORD environment variable not set.")
     if not station_name:
-        raise Exception("FLO_STATION_NAME environment variable not set.")
+        raise ValueError("FLO_STATION_NAME environment variable not set.")
     if not hass_mqtt_host:
-        raise Exception("HASS_MQTT_HOST environment variable not set.")
+        raise ValueError("HASS_MQTT_HOST environment variable not set.")
     if not hass_mqtt_port:
-        raise Exception("HASS_MQTT_PORT environment variable not set.")
+        raise ValueError("HASS_MQTT_PORT environment variable not set.")
 
-    logger.info("Starting flo X5 to MQTT...")
+    logger.info("Starting FLO to MQTT...")
+    device = None
     try:
-        # Create the client
         device = FloX5Device(
             username,
             password,
@@ -66,14 +69,18 @@ if __name__ == "__main__":
             hass_mqtt_password,
         )
 
-        # Update the status every minute
-        while True:
-            try:
-                device.update_all_sensors()
-            except Exception as e:
-                logger.error("Error updating sensors: ", e)
+        signal.signal(signal.SIGTERM, lambda *_: device.stop())
+        device.run()
+    except KeyboardInterrupt:
+        logger.info("Stopping FLO to MQTT...")
+    except (requests.RequestException, RuntimeError, ValueError, OSError) as error:
+        logger.error("Error: %s", error)
+        return 1
+    finally:
+        if device is not None:
+            device.close()
+    return 0
 
-            logger.info("Sleeping for " + str(REFRESH_DELAY_SECS) + " seconds...")
-            time.sleep(REFRESH_DELAY_SECS)
-    except Exception as e:
-        logger.error("Error: ", e)
+
+if __name__ == "__main__":
+    raise SystemExit(main())

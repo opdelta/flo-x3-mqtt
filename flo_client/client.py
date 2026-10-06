@@ -1,89 +1,63 @@
-"""Client for the flo X5 API."""
-
-import logging
-import json
-import requests
+"""Cached bridge state, independent of FLO's HTTP and JSON contracts."""
 
 from datetime import datetime, timedelta
-from flo_client.auth import Auth
-from flo_client.consts import *
+
+from flo_client.api import FloAPI, FloAPIError, Session, Station
+from flo_client.consts import REFRESH_DELAY_SECS
 
 
 class FloX5Client:
     def __init__(self, username: str, password: str) -> None:
-        self.next_refresh = datetime.now()
-        self._auth = Auth(username, password)
+        self.api = FloAPI(username, password)
+        self.next_refresh = datetime.min
+        self._stations: list[Station] = []
+        self._sessions: list[Session] = []
+        self.refresh()
 
-        self._refresh()
-
-    def _refresh(self) -> None:
-        # Refresh every minutes at most
-        if datetime.now() < self.next_refresh:
+    def refresh(self, force: bool = False) -> None:
+        if not force and datetime.now() < self.next_refresh:
             return
-
-        self._stations = self._get_stations()
-        self._sessions = self._get_sessions()
-
+        stations = self.api.get_stations()
+        sessions = self.api.get_sessions()
+        self._stations = stations
+        self._sessions = sessions
         self.next_refresh = datetime.now() + timedelta(seconds=REFRESH_DELAY_SECS)
 
-    def _get_stations(self) -> dict:
-        resp = requests.get(STATIONS_URL, headers=self._get_headers())
-        if resp.status_code != 200:
-            raise Exception("Error getting stations.", resp.status_code, resp.text)
+    def get_stations(self) -> list[Station]:
+        self.refresh()
+        return list(self._stations)
 
-        # Convert the result to a list of Station objects
-        stations = json.loads(resp.text)
+    def get_station_by_name(self, name: str) -> Station | None:
+        self.refresh()
+        matches = [station for station in self._stations if name in station.aliases]
+        if len(matches) > 1:
+            raise FloAPIError("Ambiguous charger name; use its serial number or station ID.")
+        return matches[0] if matches else None
 
-        return resp.json()
-
-    def _get_sessions(self) -> dict:
-        resp = requests.get(SESSIONS_URL, headers=self._get_headers())
-        if resp.status_code != 200:
-            raise Exception("Error getting sessions.", resp.status_code, resp.text)
-        return resp.json()
-
-    def _get_headers(self) -> dict:
-        return {
-            "Accept": "*/*",
-            "Authorization": "Bearer " + self._auth.get_access_token(),
-        }
-
-    def get_station_by_name(self, name: str) -> dict | None:
-        self._refresh()
+    def get_session_by_id(self, station_id: str) -> Session | None:
+        self.refresh()
+        aliases = {station_id}
         for station in self._stations:
-            if station["information"]["name"] == name:
-                return station
+            if station_id in station.aliases:
+                aliases.update(station.aliases)
+        matches = [session for session in self._sessions if session.station_id in aliases]
+        return next((session for session in matches if session.charging), matches[0] if matches else None)
 
-        return None
-
-    def get_session_by_id(self, id: str) -> dict | None:
-        self._refresh()
-        for session in self._sessions:
-            if session["station"]["id"] == id:
-                return session
-
-        return None
-
-    def is_station_online(self, station: dict | None) -> bool:
+    def execute_command(self, station_id: str, command: str, payload: str) -> None:
+        # The API adapter independently rechecks live connection state for start/stop.
+        station = next((item for item in self._stations if item.id == station_id), None)
         if station is None:
-            return False
+            raise FloAPIError("The configured charger is no longer in the account.")
+        self.api.execute_command(station, command, payload)
 
-        return (
-            station[STATUS_KEY][STATE_KEY] == STATE_AVAILABLE
-            or station[STATUS_KEY][STATE_KEY] == STATE_INUSE
-        )
+    def get_schedule(self, station: Station) -> dict | None:
+        return self.api.get_schedule(station)
 
-    def is_vehicle_connected(self, station: dict | None) -> bool:
-        if station is None:
-            return False
+    def is_station_online(self, station: Station | None) -> bool:
+        return station is not None and station.online
 
-        return (
-            station[STATUS_KEY][PILOT_STATE_KEY] == PILOT_STATE_CONNECTED
-            or station[STATUS_KEY][PILOT_STATE_KEY] == PILOT_STATE_CHARGING
-        )
+    def is_vehicle_connected(self, station: Station | None) -> bool:
+        return station is not None and station.connected
 
-    def is_vehicle_charging(self, station: dict | None) -> bool:
-        if station is None:
-            return False
-
-        return station[STATUS_KEY][PILOT_STATE_KEY] == PILOT_STATE_CHARGING
+    def is_vehicle_charging(self, station: Station | None) -> bool:
+        return station is not None and station.charging

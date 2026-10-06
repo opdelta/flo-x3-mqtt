@@ -1,4 +1,26 @@
-refresh.json
-__pycache__
+# Local configuration and credentials
+.env*
+*.env
+*.env.*
+!.env.example
 docker-compose.yaml
-data
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Runtime state and diagnostic captures
+data/
+refresh.json
+*.log
+*.har
+*.pcap
+*.pcapng
+
+# Python environments and caches
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+.mypy_cache/
+.pytest_cache/

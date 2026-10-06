@@ -1,14 +1,11 @@
---- Request ---
-POST https://emobility.flo.ca/v3.0/stations/bee0d412-17c5-4e49-8746-b76d7a3e2e93/session/stop
+Synthetic example. Identifiers and values are not from a real account.
 
---- Request Headers ---
-Accept:           */*
+POST https://emobility.flo.ca/v3.1/homestation/chargingstation/test-uid/session/stop
+Authorization: Bearer <access-token>
+Content-Type: application/json
 
---- Request Body ---
+{}
 
---- Response Code ---
-200: OK
-
---- Response Headers ---
-
---- Response Body ---
+test-uid represents chargingStationUid, not chargingStationId.
+The bridge performs the same fresh online/connected/capability checks as Start.
+Stations and sessions are read back even if the command fails or is rejected.

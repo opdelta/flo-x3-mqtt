@@ -1,18 +1,31 @@
-POST https://auth.pingone.ca/6cedc65f-98e2-4651-bdb8-88ee4936c9ba/as/token
+Synthetic example. All credentials and tokens are placeholders.
+Public tenant/client identifiers are defined in flo_client/api.py.
 
-Request:
-{
-    "code": (authorization code)), 
-    "code_verifier": (code verifier)),
-    "client_id": CLIENT_ID,
-    "grant_type": "authorization_code"
-} 
+POST https://auth.pingone.ca/<tenant-id>/as/token
+Content-Type: application/x-www-form-urlencoded
 
-Response:
+Authorization-code exchange (form-encoded fields):
+
+grant_type=authorization_code
+client_id=<public-client-id>
+code=<authorization-code>
+code_verifier=<original-pkce-verifier>
+
+Refresh (an alternative request to the same endpoint):
+
+grant_type=refresh_token
+client_id=<public-client-id>
+refresh_token=<saved-refresh-token>
+
+Example response:
+
 {
-    "access_token": "(access token here)",
-    "token_type": "Bearer",
-    "expires_in": 3600,
-    "refresh_token": "(refresh token here)",
-    "scope": "eMobility:all"
+  "access_token": "<access-token>",
+  "refresh_token": "<refresh-token>",
+  "token_type": "Bearer",
+  "expires_in": 3600
 }
+
+The access token stays in memory. Only the refresh token is saved in the ignored
+data/refresh.json, with owner-only permissions on Unix. Never paste tokens into
+source code, documentation, issues, or .env.example.

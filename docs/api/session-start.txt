@@ -1,19 +1,16 @@
---- Request ---
-POST https://emobility.flo.ca/v3.0/stations/bee0d412-17c5-4e49-8746-b76d7a3e2e93/session/start
+Synthetic example. Identifiers and values are not from a real account.
 
---- Request Headers ---
-Accept:           */*
-Content-Type:     application/json
+POST https://emobility.flo.ca/v3.1/homestation/chargingstation/test-uid/session/start
+Authorization: Bearer <access-token>
+Content-Type: application/json
 
-
---- Request Body ---
 {
-    "cardId": "00000000-0000-0000-0000-000000000000"
+  "evseId": "1"
 }
 
---- Response Code ---
-200: OK
+test-uid represents chargingStationUid, not chargingStationId.
+evseId comes from the current station's evse.id.
 
---- Response Headers ---
-
---- Response Body ---
+The bridge first fetches /v3.1/homestation and requires an online charger,
+a reported connected vehicle, and RemoteStartStop capability. Rejected
+commands do not send a POST. Stations and sessions are read back afterward.
